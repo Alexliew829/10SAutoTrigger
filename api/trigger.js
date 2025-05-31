@@ -8,7 +8,6 @@ const TRIGGER_KEYWORDS = ['start', 'on'];
 
 export default async function handler(req, res) {
   try {
-    // 获取主页最新一篇贴文（含发布时间）
     const postsRes = await fetch(`https://graph.facebook.com/${PAGE_ID}/posts?access_token=${ACCESS_TOKEN}&limit=1&fields=created_time`);
     const postsData = await postsRes.json();
     const post = postsData.data?.[0];
@@ -21,12 +20,10 @@ export default async function handler(req, res) {
     const postCreatedTime = new Date(post.created_time);
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
 
-    // 忽略超过30分钟的旧贴文
     if (postCreatedTime < thirtyMinutesAgo) {
-      return res.status(200).json({ message: 'Post too old, ignored', postId });
+      return res.status(200).json({ message: 'Post too old, ignored' }); // ✅ 不再返回 postId
     }
 
-    // 判断是否已经触发过
     const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE_NAME}?post_id=eq.${postId}`, {
       headers: {
         'apikey': SUPABASE_ANON_KEY,
@@ -36,10 +33,9 @@ export default async function handler(req, res) {
     });
     const checkData = await checkRes.json();
     if (checkData.length > 0) {
-      return res.status(200).json({ message: 'Already triggered for this post' });
+      return res.status(200).json({ message: 'Already triggered' }); // ✅ 不再返回 postId
     }
 
-    // 获取留言列表
     const commentsRes = await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}&fields=message,from,created_time`);
     const commentsData = await commentsRes.json();
     const comments = commentsData.data || [];
@@ -56,7 +52,6 @@ export default async function handler(req, res) {
       const isRecent = createdTime > thirtyMinutesAgoComment;
 
       if (isFromPage && equalsKeyword && isRecent) {
-        // 自动留言 “System On”
         await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -65,14 +60,12 @@ export default async function handler(req, res) {
           }),
         });
 
-        // 通知 Make Webhook
         await fetch(WEBHOOK_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ post_id: postId })
         });
 
-        // 写入 Supabase，防止重复触发
         await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE_NAME}`, {
           method: 'POST',
           headers: {
@@ -88,7 +81,7 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({ message: 'No matching comment found', postId });
+    return res.status(200).json({ message: 'No matching comment found' }); // ✅ 不再返回 postId
   } catch (err) {
     console.error('Error in trigger.js:', err);
     return res.status(500).json({ error: 'Internal Server Error' });
