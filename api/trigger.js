@@ -52,14 +52,17 @@ export default async function handler(req, res) {
       const isRecent = createdTime > thirtyMinutesAgoComment;
 
       if (isFromPage && equalsKeyword && isRecent) {
-        // ✅ 加上 as_page=PAGE_ID，确保以主页身份留言
-        await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}&as_page=${PAGE_ID}`, {
+        // ✅ 留言并打印回应结果（debug）
+        const fbResponse = await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}&as_page=${PAGE_ID}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             message: 'System On，欢迎来到情人传奇🌿'
           }),
         });
+
+        const fbResult = await fbResponse.json();
+        console.log('💬 Facebook comment response:', fbResult);
 
         await fetch(WEBHOOK_URL, {
           method: 'POST',
@@ -84,7 +87,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ message: 'No valid comment found' });
   } catch (err) {
-    console.error('Error in trigger.js:', err);
+    console.error('❌ Error in trigger.js:', err);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
