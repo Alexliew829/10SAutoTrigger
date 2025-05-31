@@ -8,6 +8,7 @@ const TRIGGER_KEYWORDS = ['start', 'on'];
 
 export default async function handler(req, res) {
   try {
+    // 获取主页最新一篇贴文（含发布时间）
     const postsRes = await fetch(`https://graph.facebook.com/${PAGE_ID}/posts?access_token=${ACCESS_TOKEN}&limit=1&fields=created_time`);
     const postsData = await postsRes.json();
     const post = postsData.data?.[0];
@@ -20,12 +21,12 @@ export default async function handler(req, res) {
     const postCreatedTime = new Date(post.created_time);
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
 
-    // 忽略太旧的贴文
+    // 忽略超过30分钟的旧贴文
     if (postCreatedTime < thirtyMinutesAgo) {
       return res.status(200).json({ message: 'Post too old, ignored', postId });
     }
 
-    // 检查 Supabase 是否已触发过
+    // 判断是否已经触发过
     const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE_NAME}?post_id=eq.${postId}`, {
       headers: {
         'apikey': SUPABASE_ANON_KEY,
@@ -38,13 +39,13 @@ export default async function handler(req, res) {
       return res.status(200).json({ message: 'Already triggered for this post' });
     }
 
-    // 获取留言
+    // 获取留言列表
     const commentsRes = await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}&fields=message,from,created_time`);
     const commentsData = await commentsRes.json();
     const comments = commentsData.data || [];
 
     const now = new Date();
-    const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
+    const thirtyMinutesAgoComment = new Date(now.getTime() - 30 * 60 * 1000);
 
     for (const comment of comments) {
       const message = comment.message?.toLowerCase().trim();
@@ -52,10 +53,10 @@ export default async function handler(req, res) {
       const createdTime = new Date(comment.created_time);
       const isFromPage = fromId === PAGE_ID;
       const equalsKeyword = TRIGGER_KEYWORDS.includes(message);
-      const isRecent = createdTime > tenMinutesAgo;
+      const isRecent = createdTime > thirtyMinutesAgoComment;
 
       if (isFromPage && equalsKeyword && isRecent) {
-        // 留言 System On
+        // 自动留言 “System On”
         await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -64,14 +65,14 @@ export default async function handler(req, res) {
           }),
         });
 
-        // 推送到 webhook
+        // 通知 Make Webhook
         await fetch(WEBHOOK_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ post_id: postId })
         });
 
-        // 写入 Supabase，防止重复
+        // 写入 Supabase，防止重复触发
         await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE_NAME}`, {
           method: 'POST',
           headers: {
