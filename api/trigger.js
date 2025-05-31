@@ -8,6 +8,7 @@ const TRIGGER_KEYWORDS = ['start', 'on'];
 
 export default async function handler(req, res) {
   try {
+    // 获取主页最新一篇贴文
     const postsRes = await fetch(`https://graph.facebook.com/${PAGE_ID}/posts?access_token=${ACCESS_TOKEN}&limit=1&fields=created_time`);
     const postsData = await postsRes.json();
     const post = postsData.data?.[0];
@@ -21,9 +22,10 @@ export default async function handler(req, res) {
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
 
     if (postCreatedTime < thirtyMinutesAgo) {
-      return res.status(200).json({ message: 'Post too old, ignored' }); // ✅ 不再返回 postId
+      return res.status(200).json({ message: 'Post exists but too old (ignored)' });
     }
 
+    // 检查是否已触发
     const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE_NAME}?post_id=eq.${postId}`, {
       headers: {
         'apikey': SUPABASE_ANON_KEY,
@@ -33,9 +35,10 @@ export default async function handler(req, res) {
     });
     const checkData = await checkRes.json();
     if (checkData.length > 0) {
-      return res.status(200).json({ message: 'Already triggered' }); // ✅ 不再返回 postId
+      return res.status(200).json({ message: 'Post already triggered' });
     }
 
+    // 获取贴文留言
     const commentsRes = await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}&fields=message,from,created_time`);
     const commentsData = await commentsRes.json();
     const comments = commentsData.data || [];
@@ -77,11 +80,11 @@ export default async function handler(req, res) {
           body: JSON.stringify({ post_id: postId }),
         });
 
-        return res.status(200).json({ message: 'System On triggered', postId });
+        return res.status(200).json({ message: 'System On triggered' });
       }
     }
 
-    return res.status(200).json({ message: 'No matching comment found' }); // ✅ 不再返回 postId
+    return res.status(200).json({ message: 'No valid comment found' });
   } catch (err) {
     console.error('Error in trigger.js:', err);
     return res.status(500).json({ error: 'Internal Server Error' });
