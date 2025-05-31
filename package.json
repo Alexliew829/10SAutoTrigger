@@ -1,0 +1,9 @@
+{
+  "name": "fb-trigger-listener",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node api/trigger.js"
+  },
+  "dependencies": {}
+}
