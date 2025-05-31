@@ -1,3 +1,5 @@
+# 构建 updated trigger.js 内容，关键词判断逻辑为：等于 start 或 on（不分大小写）
+final_trigger_js = """
 const PAGE_ID = process.env.PAGE_ID;
 const ACCESS_TOKEN = process.env.FB_ACCESS_TOKEN;
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
@@ -30,17 +32,22 @@ export default async function handler(req, res) {
       return res.status(200).json({ message: 'Already triggered for this post' });
     }
 
-    const commentsRes = await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}`);
+    const commentsRes = await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}&fields=message,from,created_time`);
     const commentsData = await commentsRes.json();
     const comments = commentsData.data || [];
 
-    for (const comment of comments) {
-      const message = comment.message?.toLowerCase();
-      const fromId = comment.from?.id;
-      const isFromPage = fromId === PAGE_ID;
-      const containsKeyword = TRIGGER_KEYWORDS.some(keyword => message?.includes(keyword));
+    const now = new Date();
+    const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
 
-      if (isFromPage && containsKeyword) {
+    for (const comment of comments) {
+      const message = comment.message?.toLowerCase().trim();
+      const fromId = comment.from?.id;
+      const createdTime = new Date(comment.created_time);
+      const isFromPage = fromId === PAGE_ID;
+      const equalsKeyword = TRIGGER_KEYWORDS.some(keyword => message === keyword);
+      const isRecent = createdTime > tenMinutesAgo;
+
+      if (isFromPage && equalsKeyword && isRecent) {
         await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -70,9 +77,21 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({ message: 'Checked latest post for trigger keywords' });
+    return res.status(200).json({ message: 'No matching trigger keywords found' });
   } catch (err) {
     console.error('Error in trigger.js:', err);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
+"""
+
+# 写入最终 trigger.js 文件
+with open("/mnt/data/api/trigger.js", "w") as f:
+    f.write(final_trigger_js.strip())
+
+# 打包为最终 ZIP
+final_zip_path = "/mnt/data/final_trigger_exact_match.zip"
+with zipfile.ZipFile(final_zip_path, 'w') as zipf:
+    zipf.write("/mnt/data/api/trigger.js", arcname="api/trigger.js")
+
+final_zip_path
