@@ -8,7 +8,6 @@ const TRIGGER_KEYWORDS = ['start', 'on'];
 
 export default async function handler(req, res) {
   try {
-    // 获取主页最新一篇贴文
     const postsRes = await fetch(`https://graph.facebook.com/${PAGE_ID}/posts?access_token=${ACCESS_TOKEN}&limit=1&fields=created_time`);
     const postsData = await postsRes.json();
     const post = postsData.data?.[0];
@@ -25,7 +24,6 @@ export default async function handler(req, res) {
       return res.status(200).json({ message: 'Post exists but too old (ignored)' });
     }
 
-    // 检查是否已触发
     const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE_NAME}?post_id=eq.${postId}`, {
       headers: {
         'apikey': SUPABASE_ANON_KEY,
@@ -38,7 +36,6 @@ export default async function handler(req, res) {
       return res.status(200).json({ message: 'Post already triggered' });
     }
 
-    // 获取贴文留言
     const commentsRes = await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}&fields=message,from,created_time`);
     const commentsData = await commentsRes.json();
     const comments = commentsData.data || [];
@@ -55,7 +52,8 @@ export default async function handler(req, res) {
       const isRecent = createdTime > thirtyMinutesAgoComment;
 
       if (isFromPage && equalsKeyword && isRecent) {
-        await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}`, {
+        // ✅ 加上 as_page=PAGE_ID，确保以主页身份留言
+        await fetch(`https://graph.facebook.com/${postId}/comments?access_token=${ACCESS_TOKEN}&as_page=${PAGE_ID}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
